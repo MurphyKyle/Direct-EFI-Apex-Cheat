@@ -103,6 +103,9 @@ void Entity::SetViewAngles(uintptr_t pid, Vector angles) {
 	Driver::write<Vector>(pid, ptr + TOFFSET(OFFSET_VIEWANGLES), angles);
 }
 
+float Entity::vis_time() {
+	return *(float*)(buffer + TOFFSET(OFFSET_VISIBLE_TIME));
+}
 
 Vector Entity::GetCamPos()
 {

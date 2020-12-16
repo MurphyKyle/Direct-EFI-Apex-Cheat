@@ -28,7 +28,7 @@ public:
 	Vector GetRecoil();
 	Vector GetViewAnglesV();
 	Vector GetVelocity();
-
+	float vis_time();
 	uintptr_t CurrentWeapon(uintptr_t pid, uintptr_t entityList);
 	void SetViewAngles(uintptr_t pid, Vector angles);
 	Vector getBonePosition(uintptr_t g_PID, int id);
