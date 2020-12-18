@@ -2,6 +2,7 @@
 #include "Main.h"
 
 
+float SMOOTH = 3.5;
 uintptr_t GamePid = 0;
 uintptr_t GameBaseAddress = 0;
 uintptr_t entitylist = 0;
@@ -14,7 +15,6 @@ uintptr_t nextEntityInfoUpdate = 0;
 
 float current_fov_limiter = 999.f;
 
-
 bool printableOut = false;
 
 int enable_aimbot = 1;
@@ -23,14 +23,13 @@ int disable_aimbot_with_spectators = 0;
 int disable_aimbot_lock_mode_with_spectators = 1;
 int count_team_entities_as_spectators = 1;
 int enable_glow_hack = 0;
-
-
+float vis_old[100];
 typedef bool (Entity::* EntityPtrDef)();
+
+
 uintptr_t eptr(EntityPtrDef method) {
     return *(uintptr_t*)&method;
 }
-
-float vis_old[100];
 
 void LoadProtectedFunctions() {
     uintptr_t t = milliseconds_now();
@@ -128,8 +127,6 @@ DWORD GetProcessIdByName(wchar_t * name) {
     return 0;
 }
 
-
-
 uintptr_t milliseconds_now() {
     static LARGE_INTEGER s_frequency;
     static BOOL s_use_qpc = QueryPerformanceFrequency(&s_frequency);
@@ -154,7 +151,14 @@ struct Fade {
     float c, d, e, f;
 };
 
-void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int id) {
+/// <summary>
+/// Update spectator count, aim to target, and the target's glow
+/// </summary>
+/// <param name="LPlayer">local player</param>
+/// <param name="target">target player</param>
+/// <param name="entitylist">list of entities</param>
+/// <param name="index">current target's index id</param>
+void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index) {
     Protect(_ReturnAddress());
     auto fptr = &Entity::Observing;
     Unprotect((void*)*(uintptr_t*)&fptr);
@@ -205,7 +209,7 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int id) {
                 else if (target->isBleedOut() || !target->isOkLifeState()) {
                     color = { 3.f, 3.f, 3.f };
                 }
-                else if (target->vis_time() > vis_old[id] || target->vis_time() < 0.f && vis_old[id] > 0.f) {
+                else if (target->vis_time() > vis_old[index] || target->vis_time() < 0.f && vis_old[index] > 0.f) {
                     color = { 0.f, 2.f, 0.f };
                 }
                 else {
@@ -226,10 +230,7 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int id) {
         }
     }
 
-
-
     if (enable_aimbot == 1) {
-
         if (target->isBleedOut() || !target->isOkLifeState()) {
             Unprotect(_ReturnAddress());
             return;
@@ -240,7 +241,7 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int id) {
             return;
         }
 
-        if (target->vis_time() > vis_old[id] || target->vis_time() < 0.f && vis_old[id] > 0.f) {
+        if (target->vis_time() > vis_old[index] || target->vis_time() < 0.f && vis_old[index] > 0.f) {
             Vector BreathAngles = LPlayer->GetBreathAngles();
             Vector LocalCamera = LPlayer->GetCamPos();
             Vector Angle = Math::CalcAngle(LocalCamera, BonePosition);
@@ -254,6 +255,10 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int id) {
     Unprotect(_ReturnAddress());
 }
 
+/// <summary>
+/// For each player, process the player and update visible time
+/// </summary>
+/// <param name="LocalPlayer"></param>
 void UpdatePlayersInfo(Entity * LocalPlayer) {
     Protect(_ReturnAddress());
 
@@ -312,7 +317,7 @@ void PredictPosition(Entity* LocalPlayer, Entity* target, Vector* BonePosition) 
 uintptr_t nextBoneSwitch = 0;
 uintptr_t StartTimeToAim = 0;
 int CurrentTargetBone = 7;
-int targets[] = {7,5,3,5,7}; // { 7,5,3,2 }
+int targets[] = {7,5,7}; // { 7,5,3,2 }
 int action = 1;
 int boneIndex = 0;
 Vector lastSet;
@@ -323,7 +328,7 @@ void AutoBoneSwitch() {
     Unprotect(milliseconds_now);
     if (nextBoneSwitch < milliseconds_now()) {
         boneIndex += action;
-        if (boneIndex == 4) {
+        if (boneIndex == 2) {
             action = -1;
         }
         else if (boneIndex == 0) {
@@ -427,24 +432,16 @@ int AimAngles(Entity* LocalPlayer, Entity* target, Vector * out) {
 
     Vector RecoilVec = LocalPlayer->GetRecoil();
     if (RecoilVec.x != 0 || RecoilVec.y != 0) {
-        Delta -= (RecoilVec * 0.05f); //only a little as we are already fixing the recoil with breath angles
+        Delta -= (RecoilVec * 0.01f); //only a little as we are already fixing the recoil with breath angles
         Math::NormalizeAngles(Delta);
     }
 
     float fov2 = (float)Math::GetFov2(DynBreath, CalculatedAngles);
-    if ((!(enable_aimbot_lock_mode==1)) || Spectators > 0 && disable_aimbot_lock_mode_with_spectators == 1) {
-        Unprotect(SmoothType_Asist);
-        SmoothType_Asist(fov2, TargetDistance , &Delta, SMOOTH);
-        Protect(SmoothType_Asist);
-    }
-    else {
-        Unprotect(SmoothType_TargetLock);
-        SmoothType_TargetLock(fov2, TargetDistance, &Delta, SMOOTH);
-        Protect(SmoothType_TargetLock);
-    }
+    Unprotect(SmoothType_Asist);
+    SmoothType_Asist(fov2, TargetDistance , &Delta, SMOOTH);
+    Protect(SmoothType_Asist);
 
     Math::NormalizeAngles(Delta);
-
 
     Vector SmoothedAngles = ViewAngles + Delta;
     Math::NormalizeAngles(SmoothedAngles);
@@ -463,18 +460,15 @@ void RunApp() {
     Protect(_ReturnAddress());
     entitylist = GameBaseAddress + TOFFSET(OFFSET_ENTITYLIST);
     uintptr_t lastAimTarget = 0;
+    int activeKey = 0x36; // 6
     
     while (true) {
-        
         uintptr_t lptr = Driver::read<uintptr_t>(GamePid, GameBaseAddress + TOFFSET(OFFSET_LOCAL_ENT));
         if (lptr == 0) break;
         
         Unprotect(getEntity);
         Entity* LocalPlayer = getEntity(GamePid, lptr);
         Protect(getEntity);
-        
-        
-        //(char*)(LocalPlayer->buffer + OFFSET_NAME)
 
         auto fptr = &Entity::isPlayer;
         Unprotect((void*)*(uintptr_t*)&fptr);
@@ -503,8 +497,6 @@ void RunApp() {
             nextEntityInfoUpdate = milliseconds_now() + 100; //update info every 200ms
             Protect(milliseconds_now);
         }
-
-        int activeKey = 0x36; // 6
 
         if (enable_aimbot == 1) {
             Unprotect(milliseconds_now);

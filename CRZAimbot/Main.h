@@ -16,7 +16,7 @@ BOOL APIENTRY DllMain(HMODULE, DWORD ul_reason_for_call, LPVOID);
 bool CheckDriverStatus();
 DWORD GetProcessIdByName(wchar_t* name);
 uintptr_t milliseconds_now();
-void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int i);
+void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index);
 void UpdatePlayersInfo(Entity* LocalPlayer);
 void PredictPosition(Entity* LocalPlayer, Entity* target, Vector* BonePosition);
 void AutoBoneSwitch();
