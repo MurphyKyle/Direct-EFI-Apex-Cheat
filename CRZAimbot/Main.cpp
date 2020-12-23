@@ -1,30 +1,35 @@
+#pragma warning(disable : 6031)
 
 #include "Main.h"
 
-int SMOOTH = 8;
 uintptr_t GamePid = 0;
 uintptr_t GameBaseAddress = 0;
 uintptr_t entitylist = 0;
-
-int Spectators = 0;
 
 uintptr_t nextAim = 0;
 uintptr_t AimTarget = 0;
 uintptr_t nextEntityInfoUpdate = 0;
 uintptr_t nextAppUpdate = 0;
+uintptr_t nextConsoleUpdate = 0;
 
 float current_fov_limiter = 999.f;
-
 bool printableOut = false;
+bool targetDummiesToggled = 0;
 
-int enable_aimbot = 1;
+int SMOOTH = 8;
+int Spectators = 0;
+
 int enable_aimbot_lock_mode = 0;
 int disable_aimbot_with_spectators = 0;
 int disable_aimbot_lock_mode_with_spectators = 1;
 int count_team_entities_as_spectators = 1;
-int enable_glow_hack = 1;
-int enableTargetDummies = 0;
-float vis_old[71];
+bool enable_aimbot = true;
+bool enable_glow_hack = true;
+bool enableTargetDummies = false;
+bool enableTargetTeammate = false;
+uintptr_t entityNum = 70;
+
+float* vis_old = new float[(entityNum + (uintptr_t)1)];
 typedef bool (Entity::* EntityPtrDef)();
 
 
@@ -198,71 +203,88 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index
         return;
     }
 
-    if (enable_glow_hack == 1 && LocalPlayerPosition.z < 10000.f) {
-        if ((int)target->buffer[GLOW_CONTEXT] != 1 || (int)target->buffer[GLOW_VISIBLE_TYPE] != 1 || (int)target->buffer[GLOW_FADE] != 872415232) {
-            float currentEntityTime = 5000.f;//(float)target->buffer[0xEE4];
-            if (!isnan(currentEntityTime) && currentEntityTime > 0.f) {
-                GlowMode mode = { 101,102,96,75 };
-                GColor color;
-                if (target->getTeamId() == LPlayer->getTeamId()) {
-                    color = { 0.f, 2.f, 3.f };
-                }
-                else if (!(target->isBleedOut() && target->isOkLifeState()) && (target->isBleedOut() || !target->isOkLifeState())) {
-                    color = { 3.f, 3.f, 3.f };
-                }
-                else if (target->vis_time() > vis_old[index] || target->vis_time() < 0.f && vis_old[index] > 0.f) {
-                    int shield = target->getShield();
-                    //color = { 0.f, 2.f, 0.f };
-                    if (shield > 100)
-                    { //Heirloom armor - Red
-                        color = { 3.f, 0.f, 0.f };
+    if (LocalPlayerPosition.z < 10000.f)
+    {
+        if (enable_glow_hack)
+        {
+            if ((int)target->buffer[GLOW_CONTEXT] != 1 || (int)target->buffer[GLOW_VISIBLE_TYPE] != 1 || (int)target->buffer[GLOW_FADE] != 872415232)
+            {
+                float currentEntityTime = 5000.f;//(float)target->buffer[0xEE4];
+                if (!isnan(currentEntityTime) && currentEntityTime > 0.f)
+                {
+                    GlowMode mode = { 101,102,96,75 };
+                    GColor color;
+                    if ((target->getTeamId() == LPlayer->getTeamId()) && !enableTargetTeammate)
+                    {
+                        color = { 0.f, 2.f, 3.f };
                     }
-                    else if (shield > 75)
-                    { //Purple armor - Purple
-                        color = { 1.84f, 0.46f, 2.07f };
+                    else if (!(enableTargetDummies) && (target->isBleedOut() || !target->isOkLifeState()))
+                    {
+                        color = { 3.f, 3.f, 3.f };
                     }
-                    else if (shield > 50)
-                    { //Blue armor - Light blue
-                        color = { 0.39f, 1.77f, 2.85f };
-                    }
-                    else if (shield > 0)
-                    { //White armor - White
-                        color = { 2.f, 2.f, 2.f };
-                    }
-                    else if (health > 50)
-                    { //Above 50% HP - Orange
-                        color = { 3.5f, 1.8f, 0.f };
+                    else if (target->vis_time() > vis_old[index] || target->vis_time() < 0.f && vis_old[index] > 0.f)
+                    {
+                        int shield = target->getShield();
+                        //color = { 0.f, 2.f, 0.f };
+                        if (shield > 100)
+                        { //Heirloom armor - Red
+                            color = { 3.f, 0.f, 0.f };
+                        }
+                        else if (shield > 75)
+                        { //Purple armor - Purple
+                            color = { 1.84f, 0.46f, 2.07f };
+                        }
+                        else if (shield > 50)
+                        { //Blue armor - Light blue
+                            color = { 0.39f, 1.77f, 2.85f };
+                        }
+                        else if (shield > 0)
+                        { //White armor - White
+                            color = { 2.f, 2.f, 2.f };
+                        }
+                        else if (health > 50)
+                        { //Above 50% HP - Orange
+                            color = { 3.5f, 1.8f, 0.f };
+                        }
+                        else
+                        { //Below 50% HP - Light Red
+                            color = { 3.28f, 0.78f, 0.63f };
+                        }
                     }
                     else
-                    { //Below 50% HP - Light Red
-                        color = { 3.28f, 0.78f, 0.63f };
+                    {
+                        color = { 0.5f, 0.f, 0.f };
                     }
-                }
-                else {
-                    color = { 0.5f, 0.f, 0.f };
-                }
-                //printf("Changed: %p\n", target->ptr);
-                Driver::write<GlowMode>(GamePid, target->ptr + GLOW_TYPE, mode);
-                Driver::write<GColor>(GamePid, target->ptr + GLOW_COLOR, color);
+                    //printf("Changed: %p\n", target->ptr);
+                    Driver::write<GlowMode>(GamePid, target->ptr + GLOW_TYPE, mode);
+                    Driver::write<GColor>(GamePid, target->ptr + GLOW_COLOR, color);
 
-                Driver::write<float>(GamePid, target->ptr + GLOW_DISTANCE, 40000.f);
-                Driver::write<float>(GamePid, target->ptr + GLOW_LIFE_TIME, currentEntityTime);
-                currentEntityTime -= 1.f;
-                Driver::write<int>(GamePid, target->ptr + GLOW_CONTEXT, 1);
-                Driver::write<int>(GamePid, target->ptr + GLOW_VISIBLE_TYPE, 1);
-                Driver::write<Fade>(GamePid, target->ptr + GLOW_FADE, { 872415232, 872415232, currentEntityTime, currentEntityTime, currentEntityTime, currentEntityTime });
+                    Driver::write<float>(GamePid, target->ptr + GLOW_DISTANCE, 40000.f);
+                    Driver::write<float>(GamePid, target->ptr + GLOW_LIFE_TIME, currentEntityTime);
+                    currentEntityTime -= 1.f;
+                    Driver::write<int>(GamePid, target->ptr + GLOW_CONTEXT, 1);
+                    Driver::write<int>(GamePid, target->ptr + GLOW_VISIBLE_TYPE, 1);
+                    Driver::write<Fade>(GamePid, target->ptr + GLOW_FADE, { 872415232, 872415232, currentEntityTime, currentEntityTime, currentEntityTime, currentEntityTime });
 
+                }
+            }
+        }
+        else if (!enable_glow_hack)
+        {
+            if ((int)target->buffer[GLOW_CONTEXT] == 1)
+            {
+                Driver::write<int>(GamePid, target->ptr + GLOW_CONTEXT, 0);
             }
         }
     }
 
-    if (enable_aimbot == 1) {
-        if (!(target->isBleedOut() && target->isOkLifeState()) && (target->isBleedOut() || !target->isOkLifeState())) {
+    if (enable_aimbot) {
+        if (!(enableTargetDummies) && (target->isBleedOut() || !target->isOkLifeState())) {
             Unprotect(_ReturnAddress());
             return;
         }
 
-        if (entity_team == LPlayer->getTeamId()) {
+        if ((entity_team == LPlayer->getTeamId()) && !enableTargetTeammate) {
             Unprotect(_ReturnAddress());
             return;
         }
@@ -291,18 +313,24 @@ void UpdatePlayersInfo(Entity * LocalPlayer) {
     current_fov_limiter = 999.f;
     AimTarget = 0;
     Spectators = 0;
-    //int entityNum = 70;
+    
+    if (targetDummiesToggled)
+    {
+        entityNum = enableTargetDummies ? 10000 : 70;
+        delete[] vis_old;
+        vis_old = nullptr;
+        vis_old = new float[(entityNum + (uintptr_t)1)];
+        targetDummiesToggled = false;
+    }
 
-    //if (enableTargetDummies)
-    //{
-    //    new vis_old float[9998]
-    //    entityNum = 9998;
-    //}
-
-    for (int i = 0; i <= 70; i++) { // 70
+    for (int i = 0; i <= entityNum; i++) { // 70
         uintptr_t centity = Driver::read<uintptr_t>(GamePid, entitylist + ((uintptr_t)i << 5));
         if (centity == 0) continue;
-        if (LocalPlayer->ptr == centity) continue;
+        if (LocalPlayer->ptr == centity)
+        {
+                std::cout << "\tLocal Entity #" << i << "  Team #" << LocalPlayer->getTeamId() << std::endl;
+            continue;
+        }
 
         Unprotect(getEntity);
         Entity* Target = getEntity(GamePid, centity);
@@ -317,6 +345,7 @@ void UpdatePlayersInfo(Entity * LocalPlayer) {
         }
         Protect((void*)*(uintptr_t*)&fptr);
 
+        std::cout << "\tEntity #" << i << "  Team #" << Target->getTeamId();
         Unprotect(ProcessPlayer);
         ProcessPlayer(LocalPlayer, Target, entitylist, i);
         Protect(ProcessPlayer);
@@ -581,19 +610,23 @@ void RunApp() {
 
                     // update app
                     Unprotect(milliseconds_now);
-                    if (nextAppUpdate < milliseconds_now())
+                    if (nextConsoleUpdate < milliseconds_now())
                     {
-                        // print spectators
-                        if (printableOut)
-                        {
-                            char sp_str[] = { 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l','\n','\0' };
-                            printf(sp_str, Spectators);
-                            memset(sp_str, 0, sizeof(sp_str));
-                        }
+                        Protect(milliseconds_now);
+                        // print msgs
+                        char sp_str[] = { '\n', 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l','\n','\0' };
+                        printf(sp_str, Spectators);
+                        memset(sp_str, 0, sizeof(sp_str));
+
+                        char smthMsg[] = { 'S','m','o','o','t','h',' ','(','+','/','-',')',' ',':',' ','%','u','\n','\0' };
+                        printf(smthMsg, SMOOTH);
+                        memset(smthMsg, 0, sizeof(smthMsg));
                     }
+                    Unprotect(milliseconds_now);
+                    nextConsoleUpdate = milliseconds_now() + 2000;
                     Protect(milliseconds_now);
 
-                    if (enable_aimbot == 1) {
+                    if (enable_aimbot) {
                         Unprotect(milliseconds_now);
                         bool key_pressed = (GetKeyState(activeKey) & 0x8000);
                         if (AimTarget > 0 && key_pressed && nextAim < milliseconds_now() && (Spectators > 0 && !(disable_aimbot_with_spectators==1) || Spectators == 0)) {
@@ -660,40 +693,55 @@ void RunApp() {
                 {
                     SMOOTH += 1;
                     if (SMOOTH > 15) SMOOTH = 15;
+
+                    char smthMsg[] = { 'S','m','o','o','t','h',' ','(','+','/','-',')',' ',':',' ','%','u','\n','\0' };
+                    printf(smthMsg, SMOOTH);
+                    memset(smthMsg, 0, sizeof(smthMsg));
                 }
 
                 if ((GetAsyncKeyState(VK_SUBTRACT) & 0x1) != 0)
                 {
                     SMOOTH -= 1;
-                    if (SMOOTH < 2) SMOOTH = 2;
+                    if (SMOOTH < 1) SMOOTH = 1;
+
+                    char smthMsg[] = { 'S','m','o','o','t','h',' ','(','+','/','-',')',' ',':',' ','%','u','\n','\0' };
+                    printf(smthMsg, SMOOTH);
+                    memset(smthMsg, 0, sizeof(smthMsg));
                 }
 
                 // update glow toggle
                 if ((GetAsyncKeyState(VK_MULTIPLY) & 0x1) != 0)
                 {
                     enable_glow_hack = !enable_glow_hack;
+
+                    char glwMsg[] = { 'G','l','o','w',' ','(','*',')',' ',':',' ','%','u','\n','\0' };
+                    printf(glwMsg, enable_glow_hack);
+                    memset(glwMsg, 0, sizeof(glwMsg));
                 }
 
                 // update target dummie toggle
-                if ((GetAsyncKeyState(VK_DIVIDE) & 0x1) != 0)
+                if (!targetDummiesToggled && ((GetAsyncKeyState(VK_DIVIDE) & 0x1) != 0))
                 {
                     enableTargetDummies = !enableTargetDummies;
+                    targetDummiesToggled = true;
+
+                    char rngMsg[] = { 'T','a','r','g','e','t',' ','R','a','n','g','e',' ','(','/',')',' ',':',' ','%','u','\n','\0' };
+                    printf(rngMsg, enableTargetDummies);
+                    memset(rngMsg, 0, sizeof(rngMsg));
                 }
 
-                char smthMsg[] = { 'S','m','o','o','t','h',' ','(','+','/','-',')',' ',':','%','u','\n','\0' };
-                printf(smthMsg, SMOOTH);
-                memset(smthMsg, 0, sizeof(smthMsg));
+                // update target teammates
+                if ((GetAsyncKeyState(VK_NUMPAD7) & 0x1) != 0)
+                {
+                    enableTargetTeammate = !enableTargetTeammate;
 
-                char glwMsg[] = { 'G','l','o','w',' ','(','*',')',' ',':',' ','%','u','\n','\0' };
-                printf(glwMsg, enable_glow_hack);
-                memset(glwMsg, 0, sizeof(glwMsg));
-
-                char dummieMsg[] = { 'T','a','r','g','e','t',' ','R','a','n','g','e',' ','(','/',')',' ',':',' ','%','u','\n','\0' };
-                printf(dummieMsg, enableTargetDummies);
-                memset(dummieMsg, 0, sizeof(dummieMsg));
+                    char tmmtMsg[] = { 'T','a','r','g','e','t',' ','T','e','a','m','m','a','t','e','s',' ','(','N','U','M','-','7',')',' ',':',' ','%','u','\n','\0' };
+                    printf(tmmtMsg, enableTargetTeammate);
+                    memset(tmmtMsg, 0, sizeof(tmmtMsg));
+                }
 
                 Unprotect(milliseconds_now);
-                nextAppUpdate = milliseconds_now() + 1500;
+                nextAppUpdate = milliseconds_now() + 500;
                 Protect(milliseconds_now);
             }
             #pragma endregion
