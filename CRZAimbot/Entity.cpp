@@ -70,6 +70,11 @@ Vector Entity::getPosition() {
 	return *(Vector*)(buffer + TOFFSET(OFFSET_ORIGIN));
 }
 bool Entity::isPlayer() {
+	char* str1 = (char*)(buffer + TOFFSET(OFFSET_TEAM));
+	if (strlen(str1) > 0 && (*(int*)str1 == 97))
+	{
+		return true;
+	}
 	return *(uintptr_t*)(buffer + TOFFSET(OFFSET_NAME)) == 125780153691248;
 }
 Vector Entity::getBonePosition(uintptr_t g_PID, int id) {

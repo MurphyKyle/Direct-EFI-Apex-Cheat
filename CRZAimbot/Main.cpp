@@ -1,17 +1,17 @@
 
 #include "Main.h"
 
-
-float SMOOTH = 3.5;
+float SMOOTH = 8.0f;
 uintptr_t GamePid = 0;
 uintptr_t GameBaseAddress = 0;
 uintptr_t entitylist = 0;
 
-uintptr_t Spectators = 0;
+int Spectators = 0;
 
 uintptr_t nextAim = 0;
 uintptr_t AimTarget = 0;
 uintptr_t nextEntityInfoUpdate = 0;
+uintptr_t nextAppUpdate = 0;
 
 float current_fov_limiter = 999.f;
 
@@ -22,8 +22,9 @@ int enable_aimbot_lock_mode = 0;
 int disable_aimbot_with_spectators = 0;
 int disable_aimbot_lock_mode_with_spectators = 1;
 int count_team_entities_as_spectators = 1;
-int enable_glow_hack = 0;
-float vis_old[100];
+int enable_glow_hack = 1;
+int enableTargetDummies = 0;
+float vis_old[71];
 typedef bool (Entity::* EntityPtrDef)();
 
 
@@ -192,7 +193,7 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index
     }
 
     int entity_team = target->getTeamId();
-    if (entity_team < 0 || entity_team>31) {
+    if (entity_team < 0 || (entity_team > 31 && entity_team != 97)) {
         Unprotect(_ReturnAddress());
         return;
     }
@@ -206,14 +207,39 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index
                 if (target->getTeamId() == LPlayer->getTeamId()) {
                     color = { 0.f, 2.f, 3.f };
                 }
-                else if (target->isBleedOut() || !target->isOkLifeState()) {
+                else if (!(target->isBleedOut() && target->isOkLifeState()) && (target->isBleedOut() || !target->isOkLifeState())) {
                     color = { 3.f, 3.f, 3.f };
                 }
                 else if (target->vis_time() > vis_old[index] || target->vis_time() < 0.f && vis_old[index] > 0.f) {
-                    color = { 0.f, 2.f, 0.f };
+                    int shield = target->getShield();
+                    //color = { 0.f, 2.f, 0.f };
+                    if (shield > 100)
+                    { //Heirloom armor - Red
+                        color = { 3.f, 0.f, 0.f };
+                    }
+                    else if (shield > 75)
+                    { //Purple armor - Purple
+                        color = { 1.84f, 0.46f, 2.07f };
+                    }
+                    else if (shield > 50)
+                    { //Blue armor - Light blue
+                        color = { 0.39f, 1.77f, 2.85f };
+                    }
+                    else if (shield > 0)
+                    { //White armor - White
+                        color = { 2.f, 2.f, 2.f };
+                    }
+                    else if (health > 50)
+                    { //Above 50% HP - Orange
+                        color = { 3.5f, 1.8f, 0.f };
+                    }
+                    else
+                    { //Below 50% HP - Light Red
+                        color = { 3.28f, 0.78f, 0.63f };
+                    }
                 }
                 else {
-                    color = { 2.f, 0.f, 0.f };
+                    color = { 0.5f, 0.f, 0.f };
                 }
                 //printf("Changed: %p\n", target->ptr);
                 Driver::write<GlowMode>(GamePid, target->ptr + GLOW_TYPE, mode);
@@ -231,7 +257,7 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index
     }
 
     if (enable_aimbot == 1) {
-        if (target->isBleedOut() || !target->isOkLifeState()) {
+        if (!(target->isBleedOut() && target->isOkLifeState()) && (target->isBleedOut() || !target->isOkLifeState())) {
             Unprotect(_ReturnAddress());
             return;
         }
@@ -265,8 +291,15 @@ void UpdatePlayersInfo(Entity * LocalPlayer) {
     current_fov_limiter = 999.f;
     AimTarget = 0;
     Spectators = 0;
+    //int entityNum = 70;
 
-    for (int i = 0; i <= 70; i++) {
+    //if (enableTargetDummies)
+    //{
+    //    new vis_old float[9998]
+    //    entityNum = 9998;
+    //}
+
+    for (int i = 0; i <= 70; i++) { // 70
         uintptr_t centity = Driver::read<uintptr_t>(GamePid, entitylist + ((uintptr_t)i << 5));
         if (centity == 0) continue;
         if (LocalPlayer->ptr == centity) continue;
@@ -418,7 +451,7 @@ int AimAngles(Entity* LocalPlayer, Entity* target, Vector * out) {
     float TargetDistance = LocalPlayerPosition.DistTo(EntityPosition) / 39.62f;
 
     double fov = Math::GetFov(DynBreath, CalculatedAngles, TargetDistance); //fov based in distance to the target and angles (like create an sphere around the target, fov is the radius
-    if (fov > 4.f || TargetDistance > Max_Distance) {
+    if (fov > 2.f || TargetDistance > Max_Distance) {
         Unprotect(_ReturnAddress());
         return 0;
     }
@@ -432,7 +465,7 @@ int AimAngles(Entity* LocalPlayer, Entity* target, Vector * out) {
 
     Vector RecoilVec = LocalPlayer->GetRecoil();
     if (RecoilVec.x != 0 || RecoilVec.y != 0) {
-        Delta -= (RecoilVec * 0.01f); //only a little as we are already fixing the recoil with breath angles
+        Delta -= (RecoilVec * 0.05f); //only a little as we are already fixing the recoil with breath angles
         Math::NormalizeAngles(Delta);
     }
 
@@ -465,92 +498,205 @@ void RunApp() {
     while (true) {
         uintptr_t lptr = Driver::read<uintptr_t>(GamePid, GameBaseAddress + TOFFSET(OFFSET_LOCAL_ENT));
         if (lptr == 0) break;
-        
-        Unprotect(getEntity);
-        Entity* LocalPlayer = getEntity(GamePid, lptr);
-        Protect(getEntity);
 
-        auto fptr = &Entity::isPlayer;
-        Unprotect((void*)*(uintptr_t*)&fptr);
-        if (!LocalPlayer->isPlayer()) {
-            Protect((void*)*(uintptr_t*)&fptr);
-            delete LocalPlayer;
-            break;
-        }
-        Protect((void*)*(uintptr_t*)&fptr);
+        int signOnState = Driver::read<uintptr_t>(GamePid, GameBaseAddress + TOFFSET(OFFSET_CLIENT_SIGNON_STATE));
+        // -1150273734 at first start 
+        bool isConnected = (signOnState == 8);
+        //std::cout <<         "\nsignOnState: " << signOnState;
+        //if (signOnState >= 0 && signOnState <= 9)
+        //{ 
+        //    switch (signOnState)
+        //    {
+        //        case 0: 
+        //            std::cout << " : None";
+        //            break;
+        //        case 1:
+        //            std::cout << " : Challenge";
+        //            break;
+        //        case 2:
+        //            std::cout << " : Connected";
+        //            break;
+        //        case 3:
+        //            std::cout << " : StateNew";
+        //            break;
+        //        case 4:
+        //            std::cout << " : Prespawn";
+        //            break;
+        //        case 5:
+        //            std::cout << " : GettingData";
+        //            break;
+        //        case 6:
+        //            std::cout << " : Spawn";
+        //            break;
+        //        case 7:
+        //            std::cout << " : FirstSnap";
+        //            break;
+        //        case 8:
+        //            std::cout << " : Full";
+        //            break;
+        //        case 9:
+        //            std::cout << " : ChangeLevel";
+        //            break;
+        //    }
+        //}
+        //std::cout << std::endl;
 
-        Unprotect(milliseconds_now);
-        if (nextEntityInfoUpdate < milliseconds_now()) {
-            Protect(milliseconds_now);
-            
-            Unprotect(UpdatePlayersInfo);
-            UpdatePlayersInfo(LocalPlayer);
-            Protect(UpdatePlayersInfo);
+        if (isConnected)
+        {
+            // game is connected
+            uintptr_t currentArea = {};
+            currentArea = Driver::read<uintptr_t>(GamePid, GameBaseAddress + TOFFSET(OFFSET_CLIENT_LEVEL_NAME));
 
-            if (Spectators > 0 && printableOut) {
-                char sp_str[] = { 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l','u','\0' };
-                printf(sp_str, Spectators);
-                memset(sp_str, 0, sizeof(sp_str));
-            }
-            
-            Unprotect(milliseconds_now);
-            nextEntityInfoUpdate = milliseconds_now() + 100; //update info every 200ms
-            Protect(milliseconds_now);
-        }
+            if (char* lvlStr = (char*) &currentArea)
+            {
+                // has valid area string
+                if (!(strcmp(lvlStr, "mp_lobby") == 0))
+                {
+                    // not in lobby
+                    Unprotect(getEntity);
+                    Entity* LocalPlayer = getEntity(GamePid, lptr);
+                    Protect(getEntity);
 
-        if (enable_aimbot == 1) {
-            Unprotect(milliseconds_now);
-            bool key_pressed = (GetKeyState(activeKey) & 0x8000);
-            if (AimTarget > 0 && key_pressed && nextAim < milliseconds_now() && (Spectators > 0 && !(disable_aimbot_with_spectators==1) || Spectators == 0)) {
-                Protect(milliseconds_now);
+                    auto fptr = &Entity::isPlayer;
+                    Unprotect((void*)*(uintptr_t*)&fptr);
+                    if (!LocalPlayer->isPlayer()) {
+                        Protect((void*)*(uintptr_t*)&fptr);
+                        delete LocalPlayer;
+                        break;
+                    }
+                    Protect((void*)*(uintptr_t*)&fptr);
 
-                if (lastAimTarget != AimTarget) {
-                    TargetLocked = false;
                     Unprotect(milliseconds_now);
-                    StartTimeToAim = milliseconds_now();
-                    Protect(milliseconds_now);
-                    lastAimTarget = AimTarget;
-                }
-                Unprotect(getEntity);
-                Entity* target = getEntity(GamePid, AimTarget);
-                Protect(getEntity);
+                    if (nextEntityInfoUpdate < milliseconds_now()) {
+                        Protect(milliseconds_now);
 
-                Vector result = { 0.f,0.f,0.f };
+                        Unprotect(UpdatePlayersInfo);
+                        UpdatePlayersInfo(LocalPlayer);
+                        Protect(UpdatePlayersInfo);
+            
+                        Unprotect(milliseconds_now);
+                        nextEntityInfoUpdate = milliseconds_now() + 50; //update info
+                        Protect(milliseconds_now);
+                    }
 
-                Unprotect(AimAngles);
-                int status = AimAngles(LocalPlayer, target, &result);
-                Protect(AimAngles);
-                if (status == 1) { // 1 = movement needed, 2 = view already there, 0 = some out of aimbot params
-                    LocalPlayer->SetViewAngles(GamePid, result);
-                }
-                else if (status == 0) {
-                    TargetLocked = false;
+
+                    // update app
                     Unprotect(milliseconds_now);
-                    StartTimeToAim = milliseconds_now();
+                    if (nextAppUpdate < milliseconds_now())
+                    {
+                        // print spectators
+                        if (printableOut)
+                        {
+                            char sp_str[] = { 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l', '\n', '\0' };
+                            printf(sp_str, Spectators);
+                            memset(sp_str, 0, sizeof(sp_str));
+                        }
+
+                        // update smooth value
+                        if ((GetAsyncKeyState(VK_ADD) & 0x8000) != 0)
+                        {
+                            if (SMOOTH > 15.f)
+                            {
+                                SMOOTH = 15.f;
+                            }
+                            else
+                            {
+                                SMOOTH += 1.f; 
+                            }
+                        }
+                        
+                        if ((GetAsyncKeyState(VK_SUBTRACT) & 0x8000) != 0)
+                        {
+                            if (SMOOTH < 5.f)
+                            {
+                                SMOOTH = 5.f;
+                            }
+                            else
+                            {
+                                SMOOTH -= 1.f;
+                            }
+                        }
+
+                        // update glow toggle
+                        if ((GetAsyncKeyState(VK_MULTIPLY) & 0x8000) != 0)
+                        {
+                            enable_glow_hack = !enable_glow_hack;
+                        }
+
+                        char smthMsg[] = { 'S', 'm', 'o', 'o', 't', 'h', ':', '%', 'f', '\n', '\0' };
+                        printf(smthMsg, SMOOTH);
+                        memset(smthMsg, 0, sizeof(smthMsg));
+
+                        char glwMsg[] = { 'G', 'l', 'o', 'w', ':', ' ', '%', 'l', 'l', '\n', '\0' };
+                        printf(glwMsg, enable_glow_hack);
+                        memset(glwMsg, 0, sizeof(glwMsg));
+
+                        nextAppUpdate = milliseconds_now() + 1500;
+                    }
                     Protect(milliseconds_now);
-                }
 
-                delete target;
-                Unprotect(milliseconds_now);
-                nextAim = milliseconds_now() + 22; //16 = ~60 movements per second
-                Protect(milliseconds_now);
-            }
-            else if (!key_pressed || AimTarget == 0) {
+                    if (enable_aimbot == 1) {
+                        Unprotect(milliseconds_now);
+                        bool key_pressed = (GetKeyState(activeKey) & 0x8000);
+                        if (AimTarget > 0 && key_pressed && nextAim < milliseconds_now() && (Spectators > 0 && !(disable_aimbot_with_spectators==1) || Spectators == 0)) {
+                            Protect(milliseconds_now);
 
-                TargetLocked = false;
-                Unprotect(milliseconds_now);
-                StartTimeToAim = milliseconds_now();
-                Protect(milliseconds_now);
+                            if (lastAimTarget != AimTarget) {
+                                TargetLocked = false;
+                                Unprotect(milliseconds_now);
+                                StartTimeToAim = milliseconds_now();
+                                Protect(milliseconds_now);
+                                lastAimTarget = AimTarget;
+                            }
+                            Unprotect(getEntity);
+                            Entity* target = getEntity(GamePid, AimTarget);
+                            Protect(getEntity);
 
-                ProtectedSleep(2);
-            }
-        }
-        else {
-            ProtectedSleep(100);
-        }
-        Protect(milliseconds_now);
+                            Vector result = { 0.f,0.f,0.f };
+
+                            Unprotect(AimAngles);
+                            int status = AimAngles(LocalPlayer, target, &result);
+                            Protect(AimAngles);
+                            if (status == 1) { // 1 = movement needed, 2 = view already there, 0 = some out of aimbot params
+                                LocalPlayer->SetViewAngles(GamePid, result);
+                            }
+                            else if (status == 0) {
+                                TargetLocked = false;
+                                Unprotect(milliseconds_now);
+                                StartTimeToAim = milliseconds_now();
+                                Protect(milliseconds_now);
+                            }
+
+                            delete target;
+                            Unprotect(milliseconds_now);
+                            nextAim = milliseconds_now() + 16; //16 = ~60 movements per second
+                            Protect(milliseconds_now);
+                        }
+                        else if (!key_pressed || AimTarget == 0) {
+
+                            TargetLocked = false;
+                            Unprotect(milliseconds_now);
+                            StartTimeToAim = milliseconds_now();
+                            Protect(milliseconds_now);
+
+                            ProtectedSleep(2);
+                        }
+                    }
+                    else {
+                        ProtectedSleep(100);
+                    }
+                    Protect(milliseconds_now);
         
-        delete LocalPlayer;
+                    delete LocalPlayer;
+                }
+            }
+        }
+        else
+        {
+            const char msg[] = { 'W', 'a', 'i', 't', 'i', 'n', 'g', ' ', 't', 'o', ' ', 'C', 'o', 'n', 'n', 'e', 'c', 't', '.', ' ', '.', ' ', '.', '\0' };
+            std::cout << msg << std::endl;
+            ProtectedSleep(2000);
+        }
     }
     Unprotect(_ReturnAddress());
 }
@@ -612,13 +758,13 @@ void Configure() {
     //    //std::cin.ignore();
     //    std::cin.clear();
     //}
-    char enable_glow_str[] = { 'D','o',' ','y','o','u',' ','w','a','n','t',' ','t','o',' ','e','n','a','b','l','e',' ','g','l','o','w',' ','h','a','c','k','?',':',' ','\0' };
-    std::cout << enable_glow_str;
-    memset(enable_glow_str, 0, sizeof(enable_glow_str));
-    std::cin >> enable_glow_hack;
+    //char enable_glow_str[] = { 'D','o',' ','y','o','u',' ','w','a','n','t',' ','t','o',' ','e','n','a','b','l','e',' ','g','l','o','w',' ','h','a','c','k','?',':',' ','\0' };
+    //std::cout << enable_glow_str;
+    //memset(enable_glow_str, 0, sizeof(enable_glow_str));
+    //std::cin >> enable_glow_hack;
     //std::cin.ignore();
-    std::cin.clear();
-    system("cls");
+    //std::cin.clear();
+    std::cout << '\n';
     //std::cout << "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
    
     if (consoleWnd == NULL) {
@@ -663,12 +809,10 @@ DWORD WINAPI mainThread(PVOID) {
     Protect(Driver::initialize);
     Protect(CheckDriverStatus);
 
-    Beep(900, 200);
-    Beep(1100, 200);
-    Beep(1300, 200);
-    Beep(1500, 300);
-    Beep(1700, 400);
-    Beep(1900, 500);
+    //Beep(900, 200);
+    //Beep(1100, 200);
+    Beep(1300, 300);
+    //Beep(1500, 300);
 
     Unprotect(Configure);
     Configure();
@@ -697,6 +841,8 @@ DWORD WINAPI mainThread(PVOID) {
             GamePid = 0;
             GameBaseAddress = 0;
         }
+        char msg[] = { 'W', 'a', 'i', 't', 'i', 'n', 'g', ' ', 'f', 'o', 'r', ' ', 'g', 'a', 'm', 'e', '.', ' ', '.', ' ', '.', '\t', '\0' };
+        std::cout << msg;
         ProtectedSleep(2000);
     }
 
