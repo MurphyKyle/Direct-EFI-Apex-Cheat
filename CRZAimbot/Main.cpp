@@ -1,7 +1,7 @@
 
 #include "Main.h"
 
-float SMOOTH = 8.0f;
+int SMOOTH = 8;
 uintptr_t GamePid = 0;
 uintptr_t GameBaseAddress = 0;
 uintptr_t entitylist = 0;
@@ -374,7 +374,7 @@ void AutoBoneSwitch() {
     Unprotect(_ReturnAddress());
 }
 
-void SmoothType_Asist(float fov, float TargetDistance, Vector* Delta, float smooth_multiplier) {
+void SmoothType_Asist(float fov, float TargetDistance, Vector* Delta, int smooth_multiplier) {
     Protect(_ReturnAddress());
     float smooth = 0.f;
     if (TargetDistance < 10.f) {
@@ -391,7 +391,7 @@ void SmoothType_Asist(float fov, float TargetDistance, Vector* Delta, float smoo
     Unprotect(_ReturnAddress());
 }
 
-void SmoothType_TargetLock(float fov, float TargetDistance, Vector* Delta, float smooth_multiplier) {
+void SmoothType_TargetLock(float fov, float TargetDistance, Vector* Delta, int smooth_multiplier) {
     Protect(_ReturnAddress());
     if (!TargetLocked) {
         Unprotect(milliseconds_now);
@@ -579,7 +579,6 @@ void RunApp() {
                         Protect(milliseconds_now);
                     }
 
-
                     // update app
                     Unprotect(milliseconds_now);
                     if (nextAppUpdate < milliseconds_now())
@@ -587,51 +586,10 @@ void RunApp() {
                         // print spectators
                         if (printableOut)
                         {
-                            char sp_str[] = { 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l', '\n', '\0' };
+                            char sp_str[] = { 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l','\n','\0' };
                             printf(sp_str, Spectators);
                             memset(sp_str, 0, sizeof(sp_str));
                         }
-
-                        // update smooth value
-                        if ((GetAsyncKeyState(VK_ADD) & 0x8000) != 0)
-                        {
-                            if (SMOOTH > 15.f)
-                            {
-                                SMOOTH = 15.f;
-                            }
-                            else
-                            {
-                                SMOOTH += 1.f; 
-                            }
-                        }
-                        
-                        if ((GetAsyncKeyState(VK_SUBTRACT) & 0x8000) != 0)
-                        {
-                            if (SMOOTH < 5.f)
-                            {
-                                SMOOTH = 5.f;
-                            }
-                            else
-                            {
-                                SMOOTH -= 1.f;
-                            }
-                        }
-
-                        // update glow toggle
-                        if ((GetAsyncKeyState(VK_MULTIPLY) & 0x8000) != 0)
-                        {
-                            enable_glow_hack = !enable_glow_hack;
-                        }
-
-                        char smthMsg[] = { 'S', 'm', 'o', 'o', 't', 'h', ':', '%', 'f', '\n', '\0' };
-                        printf(smthMsg, SMOOTH);
-                        memset(smthMsg, 0, sizeof(smthMsg));
-
-                        char glwMsg[] = { 'G', 'l', 'o', 'w', ':', ' ', '%', 'l', 'l', '\n', '\0' };
-                        printf(glwMsg, enable_glow_hack);
-                        memset(glwMsg, 0, sizeof(glwMsg));
-
-                        nextAppUpdate = milliseconds_now() + 1500;
                     }
                     Protect(milliseconds_now);
 
@@ -690,10 +648,59 @@ void RunApp() {
                     delete LocalPlayer;
                 }
             }
+
+            #pragma region SettingsUpdate
+
+            Unprotect(milliseconds_now);
+            if (nextAppUpdate < milliseconds_now())
+            {
+                Protect(milliseconds_now);
+                // update smooth value
+                if ((GetAsyncKeyState(VK_ADD) & 0x1) != 0)
+                {
+                    SMOOTH += 1;
+                    if (SMOOTH > 15) SMOOTH = 15;
+                }
+
+                if ((GetAsyncKeyState(VK_SUBTRACT) & 0x1) != 0)
+                {
+                    SMOOTH -= 1;
+                    if (SMOOTH < 2) SMOOTH = 2;
+                }
+
+                // update glow toggle
+                if ((GetAsyncKeyState(VK_MULTIPLY) & 0x1) != 0)
+                {
+                    enable_glow_hack = !enable_glow_hack;
+                }
+
+                // update target dummie toggle
+                if ((GetAsyncKeyState(VK_DIVIDE) & 0x1) != 0)
+                {
+                    enableTargetDummies = !enableTargetDummies;
+                }
+
+                char smthMsg[] = { 'S','m','o','o','t','h',' ','(','+','/','-',')',' ',':','%','u','\n','\0' };
+                printf(smthMsg, SMOOTH);
+                memset(smthMsg, 0, sizeof(smthMsg));
+
+                char glwMsg[] = { 'G','l','o','w',' ','(','*',')',' ',':',' ','%','u','\n','\0' };
+                printf(glwMsg, enable_glow_hack);
+                memset(glwMsg, 0, sizeof(glwMsg));
+
+                char dummieMsg[] = { 'T','a','r','g','e','t',' ','R','a','n','g','e',' ','(','/',')',' ',':',' ','%','u','\n','\0' };
+                printf(dummieMsg, enableTargetDummies);
+                memset(dummieMsg, 0, sizeof(dummieMsg));
+
+                Unprotect(milliseconds_now);
+                nextAppUpdate = milliseconds_now() + 1500;
+                Protect(milliseconds_now);
+            }
+            #pragma endregion
         }
         else
         {
-            const char msg[] = { 'W', 'a', 'i', 't', 'i', 'n', 'g', ' ', 't', 'o', ' ', 'C', 'o', 'n', 'n', 'e', 'c', 't', '.', ' ', '.', ' ', '.', '\0' };
+            const char msg[] = { 'W','a','i','t','i','n','g',' ','t','o',' ','C','o','n','n','e','c','t','.',' ','.',' ','.','\0' };
             std::cout << msg << std::endl;
             ProtectedSleep(2000);
         }
@@ -819,8 +826,8 @@ DWORD WINAPI mainThread(PVOID) {
     Protect(Configure);
 
     while (true) {
-        wchar_t name[] = { 'r', '5', 'a', 'p', 'e', 'x', '.', 'e', 'x', 'e', 0 };
-        //wchar_t name[] = { 'E', 'a', 's', 'y', 'A', 'n', 't', 'i', 'C', 'h', 'e', 'a', 't', '_', 'l', 'a', 'u', 'n', 'c', 'h', 'e', 'r', '.', 'e', 'x', 'e', 0 };
+        wchar_t name[] = { 'r','5','a','p','e','x','.','e','x','e', 0 };
+        //wchar_t name[] = { 'E','a','s','y','A','n','t','i','C','h','e','a','t','_','l','a','u','n','c','h','e','r','.','e','x','e', 0 };
         Unprotect(GetProcessIdByName);
         DWORD pid = GetProcessIdByName(name);
         Protect(GetProcessIdByName);
@@ -841,7 +848,7 @@ DWORD WINAPI mainThread(PVOID) {
             GamePid = 0;
             GameBaseAddress = 0;
         }
-        char msg[] = { 'W', 'a', 'i', 't', 'i', 'n', 'g', ' ', 'f', 'o', 'r', ' ', 'g', 'a', 'm', 'e', '.', ' ', '.', ' ', '.', '\t', '\0' };
+        char msg[] = { 'W','a','i','t','i','n','g',' ','f','o','r',' ','g','a','m','e','.',' ','.',' ','.','\t','\0' };
         std::cout << msg;
         ProtectedSleep(2000);
     }
