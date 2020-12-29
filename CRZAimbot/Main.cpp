@@ -605,7 +605,7 @@ void RunApp() {
                     {
                         Protect(milliseconds_now);
                         // print msgs
-                        char sp_str[] = { '\n', 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l','u','\n','\0' };
+                        char sp_str[] = { '\n', 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l','u','\n','\n','\0' };
                         printf(sp_str, Spectators);
                         memset(sp_str, 0, sizeof(sp_str));
 
@@ -679,7 +679,7 @@ void RunApp() {
             if (nextAppUpdate < milliseconds_now())
             {
                 Protect(milliseconds_now);
-                // update smooth value
+                // update smooth value (NUM +/-)
                 if ((GetAsyncKeyState(VK_ADD) & 0x1) != 0)
                 {
                     SMOOTH += 1;
@@ -700,7 +700,7 @@ void RunApp() {
                     memset(smthMsg, 0, sizeof(smthMsg));
                 }
 
-                // update glow toggle
+                // update glow toggle (NUM-*)
                 if ((GetAsyncKeyState(VK_MULTIPLY) & 0x1) != 0)
                 {
                     enable_glow_hack = !enable_glow_hack;
@@ -710,7 +710,7 @@ void RunApp() {
                     memset(glwMsg, 0, sizeof(glwMsg));
                 }
 
-                // update target dummie toggle
+                // update target dummie toggle (NUM-/)
                 if (!targetDummiesToggled && ((GetAsyncKeyState(VK_DIVIDE) & 0x1) != 0))
                 {
                     enableTargetDummies = !enableTargetDummies;
@@ -721,7 +721,7 @@ void RunApp() {
                     memset(rngMsg, 0, sizeof(rngMsg));
                 }
 
-                // update target teammates
+                // update target teammates (NUM-7)
                 if ((GetAsyncKeyState(VK_NUMPAD7) & 0x1) != 0)
                 {
                     enableTargetTeammate = !enableTargetTeammate;
