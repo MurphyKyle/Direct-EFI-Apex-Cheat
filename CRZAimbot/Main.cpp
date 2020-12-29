@@ -20,9 +20,6 @@ int SMOOTH = 8;
 int Spectators = 0;
 
 int enable_aimbot_lock_mode = 0;
-int disable_aimbot_with_spectators = 0;
-int disable_aimbot_lock_mode_with_spectators = 1;
-int count_team_entities_as_spectators = 1;
 bool enable_aimbot = true;
 bool enable_glow_hack = true;
 bool enableTargetDummies = false;
@@ -171,10 +168,7 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index
     intptr_t obser = target->Observing(GamePid, entitylist);
     Protect((void*)*(uintptr_t*)&fptr);
     if (obser == LPlayer->ptr) {
-        if (target->getTeamId() != LPlayer->getTeamId() ||
-            target->getTeamId() == LPlayer->getTeamId() && count_team_entities_as_spectators == 1) {
-            Spectators++;
-        }
+        Spectators++;
     }
     if (obser != 0) { // Is an observer... nothing to do
         Unprotect(_ReturnAddress());
@@ -224,6 +218,10 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index
                     }
                     else if (target->vis_time() > vis_old[index] || target->vis_time() < 0.f && vis_old[index] > 0.f)
                     {
+                        color = { 0.f, 2.f, 0.f };
+                    }
+                    else
+                    {
                         int shield = target->getShield();
                         //color = { 0.f, 2.f, 0.f };
                         if (shield > 100)
@@ -250,10 +248,6 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index
                         { //Below 50% HP - Light Red
                             color = { 3.28f, 0.78f, 0.63f };
                         }
-                    }
-                    else
-                    {
-                        color = { 0.5f, 0.f, 0.f };
                     }
                     //printf("Changed: %p\n", target->ptr);
                     Driver::write<GlowMode>(GamePid, target->ptr + GLOW_TYPE, mode);
@@ -325,12 +319,6 @@ void UpdatePlayersInfo(Entity * LocalPlayer) {
 
     for (int i = 0; i <= entityNum; i++) { // 70
         uintptr_t centity = Driver::read<uintptr_t>(GamePid, entitylist + ((uintptr_t)i << 5));
-        if (centity == 0) continue;
-        if (LocalPlayer->ptr == centity)
-        {
-                std::cout << "\tLocal Entity #" << i << "  Team #" << LocalPlayer->getTeamId() << std::endl;
-            continue;
-        }
 
         Unprotect(getEntity);
         Entity* Target = getEntity(GamePid, centity);
@@ -338,14 +326,23 @@ void UpdatePlayersInfo(Entity * LocalPlayer) {
 
         auto fptr = &Entity::isPlayer;
         Unprotect((void*)*(uintptr_t*)&fptr);
-        if (!Target->isPlayer()) {
+        if (!Target->isPlayer())
+        {
             Protect((void*)*(uintptr_t*)&fptr);
             delete Target;
             continue;
         }
         Protect((void*)*(uintptr_t*)&fptr);
 
-        std::cout << "\tEntity #" << i << "  Team #" << Target->getTeamId();
+        if (centity == 0) continue;
+        if (LocalPlayer->ptr == centity)
+        {
+            //std::cout << "\tLocal Entity #" << i << "  Team #" << LocalPlayer->getTeamId() << std::endl;
+            continue;
+        }
+
+
+        //std::cout << "\nEntity #" << i << "  Team #" << Target->getTeamId();
         Unprotect(ProcessPlayer);
         ProcessPlayer(LocalPlayer, Target, entitylist, i);
         Protect(ProcessPlayer);
@@ -614,7 +611,7 @@ void RunApp() {
                     {
                         Protect(milliseconds_now);
                         // print msgs
-                        char sp_str[] = { '\n', 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l','\n','\0' };
+                        char sp_str[] = { '\n', 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l','u','\n','\0' };
                         printf(sp_str, Spectators);
                         memset(sp_str, 0, sizeof(sp_str));
 
@@ -629,7 +626,7 @@ void RunApp() {
                     if (enable_aimbot) {
                         Unprotect(milliseconds_now);
                         bool key_pressed = (GetKeyState(activeKey) & 0x8000);
-                        if (AimTarget > 0 && key_pressed && nextAim < milliseconds_now() && (Spectators > 0 && !(disable_aimbot_with_spectators==1) || Spectators == 0)) {
+                        if (AimTarget > 0 && key_pressed && nextAim < milliseconds_now()) {
                             Protect(milliseconds_now);
 
                             if (lastAimTarget != AimTarget) {
@@ -770,58 +767,8 @@ void Configure() {
         printableOut = true;
     }
 
-    //char hi_str[] = { 'H','i',',',' ','W','e','l','c','o','m','e',' ','t','o',' ','C','R','Z',' ','E','F','I',' ','C','h','e','a','t','\n','A','n','s','w','e','r',' ','a','l','l',' ','t','h','e',' ','q','u','e','s','t','i','o','n','s',' ','w','i','t','h',' ','1',' ','o','r',' ','0',' ','f','o','r',' ','t','r','u','e','/','f','a','l','s','e','\n','\0' };
-    //std::cout << hi_str;
-    //memset(hi_str, 0, sizeof(hi_str));
-    //char hi2_str[] = { 'T','h','i','s',' ','c','h','e','a','t',' ','i','s',' ','a','b','s','o','l','u','t','e','l','y',' ','f','r','e','e',' ','a','t',' ','U','n','k','n','o','w','n','C','h','e','a','t','s','\n','\0' };
-    //std::cout << hi2_str;
-    //memset(hi2_str, 0, sizeof(hi2_str));
-    //char aimbot_str[] = { 'D','o',' ','y','o','u',' ','w','a','n','t',' ','t','o',' ','e','n','a','b','l','e',' ','a','i','m','b','o','t','?',':',' ','\0' };
-    //std::cout << aimbot_str;
-    //memset(aimbot_str, 0, sizeof(aimbot_str));
-    //std::cin >> enable_aimbot;
-    ////std::cin.ignore();
-    //std::cin.clear();
-    //if (enable_aimbot != 0) {
-    //    char aimbot_lock_str[] = { 'D','o',' ','y','o','u',' ','w','a','n','t',' ','t','o',' ','e','n','a','b','l','e',' ','a','i','m','b','o','t',' ','l','o','c','k',' ','m','o','d','e','?',':',' ','\0' };
-    //    std::cout << aimbot_lock_str;
-    //    memset(aimbot_lock_str, 0, sizeof(aimbot_lock_str));
-    //    std::cin >> enable_aimbot_lock_mode;
-    //    //std::cin.ignore();
-    //    std::cin.clear();
-    //    char disable_aimbot_str[] = { 'D','i','s','a','b','l','e',' ','a','i','m','b','o','t',' ','w','i','t','h',' ','s','p','e','c','t','a','t','o','r','s','?',':',' ','\0' };
-    //    std::cout << disable_aimbot_str;
-    //    memset(disable_aimbot_str, 0, sizeof(disable_aimbot_str));
-    //    std::cin >> disable_aimbot_with_spectators;
-    //    //std::cin.ignore();
-    //    std::cin.clear();
-    //    if (disable_aimbot_with_spectators == 0 && enable_aimbot_lock_mode == 1) {
-    //        char aimbot_disable_lock_str[] = { 'D','o',' ','y','o','u',' ','w','a','n','t',' ','t','o',' ','d','i','s','a','b','l','e',' ','a','i','m','b','o','t',' ','l','o','c','k',' ','m','o','d','e',' ','w','i','t','h',' ','s','p','e','c','t','a','t','o','r','s','?',':',' ','\0' };
-    //        std::cout << aimbot_disable_lock_str;
-    //        memset(aimbot_disable_lock_str, 0, sizeof(aimbot_disable_lock_str));
-    //        std::cin >> disable_aimbot_lock_mode_with_spectators;
-    //        //std::cin.ignore();
-    //        std::cin.clear();
-    //    }
-    //    else {
-    //        disable_aimbot_lock_mode_with_spectators = 1;
-    //    }
-    //    char team_player_as_spectators_str[] = { 'C','o','u','n','t',' ','t','e','a','m',' ','p','l','a','y','e','r','s',' ','a','s',' ','s','p','e','c','t','a','t','o','r','s','?',':',' ','\0' };
-    //    std::cout << team_player_as_spectators_str;
-    //    memset(team_player_as_spectators_str, 0, sizeof(team_player_as_spectators_str));
-    //    std::cin >> count_team_entities_as_spectators;
-    //    //std::cin.ignore();
-    //    std::cin.clear();
-    //}
-    //char enable_glow_str[] = { 'D','o',' ','y','o','u',' ','w','a','n','t',' ','t','o',' ','e','n','a','b','l','e',' ','g','l','o','w',' ','h','a','c','k','?',':',' ','\0' };
-    //std::cout << enable_glow_str;
-    //memset(enable_glow_str, 0, sizeof(enable_glow_str));
-    //std::cin >> enable_glow_hack;
-    //std::cin.ignore();
-    //std::cin.clear();
     std::cout << '\n';
-    //std::cout << "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
-   
+
     if (consoleWnd == NULL) {
         fclose(stdin);
         fclose(stdout);
