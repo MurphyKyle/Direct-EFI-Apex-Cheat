@@ -1,8 +1,7 @@
 #pragma once
 
 //MISC
-#define SMOOTH 2.f //1~20
-#define Max_Cheat_Distance 400.f
+#define Max_Distance 350.f
 
 
 //XOR Keys
