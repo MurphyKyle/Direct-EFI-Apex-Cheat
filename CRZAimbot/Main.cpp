@@ -335,14 +335,8 @@ void UpdatePlayersInfo(Entity * LocalPlayer) {
         Protect((void*)*(uintptr_t*)&fptr);
 
         if (centity == 0) continue;
-        if (LocalPlayer->ptr == centity)
-        {
-            //std::cout << "\tLocal Entity #" << i << "  Team #" << LocalPlayer->getTeamId() << std::endl;
-            continue;
-        }
+        if (LocalPlayer->ptr == centity) continue;
 
-
-        //std::cout << "\nEntity #" << i << "  Team #" << Target->getTeamId();
         Unprotect(ProcessPlayer);
         ProcessPlayer(LocalPlayer, Target, entitylist, i);
         Protect(ProcessPlayer);
