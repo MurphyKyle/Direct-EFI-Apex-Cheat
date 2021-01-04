@@ -16,7 +16,7 @@ float current_fov_limiter = 999.f;
 bool printableOut = false;
 bool targetDummiesToggled = 0;
 
-int SMOOTH = 8;
+int SMOOTH = 12;
 int Spectators = 0;
 
 int enable_aimbot_lock_mode = 0;
@@ -55,8 +55,7 @@ void LoadProtectedFunctions() {
     addFunc({ UpdatePlayersInfo, (uintptr_t)PredictPosition - (uintptr_t)UpdatePlayersInfo - 0x3, xorkey, false });
     addFunc({ PredictPosition, (uintptr_t)AutoBoneSwitch - (uintptr_t)PredictPosition - 0x3, xorkey, false });
     addFunc({ AutoBoneSwitch, (uintptr_t)SmoothType_Asist - (uintptr_t)AutoBoneSwitch - 0x3, xorkey, false });
-    addFunc({ SmoothType_Asist, (uintptr_t)SmoothType_TargetLock - (uintptr_t)SmoothType_Asist - 0x3, xorkey, false });
-    addFunc({ SmoothType_TargetLock, (uintptr_t)AimAngles - (uintptr_t)SmoothType_TargetLock - 0x3, xorkey, false });
+    addFunc({ SmoothType_Asist, (uintptr_t)AimAngles - (uintptr_t)SmoothType_Asist - 0x3, xorkey, false });
     addFunc({ AimAngles, (uintptr_t)RunApp - (uintptr_t)AimAngles - 0x3, xorkey, false });
     addFunc({ RunApp, (uintptr_t)Configure - (uintptr_t)RunApp - 0x3, xorkey, false });
     addFunc({ Configure, (uintptr_t)mainThread - (uintptr_t)Configure - 0x3, xorkey, false });
@@ -388,7 +387,7 @@ void AutoBoneSwitch() {
             action = 1;
         }
         CurrentTargetBone = targets[boneIndex];
-        nextBoneSwitch = milliseconds_now() + 200;
+        nextBoneSwitch = milliseconds_now() + 100;
     }
     Protect(milliseconds_now);
     Unprotect(_ReturnAddress());
@@ -401,7 +400,7 @@ void SmoothType_Asist(float fov, float TargetDistance, Vector* Delta, int smooth
         smooth = 6.f + (smooth_multiplier - 1.f) * 3.f;
     }
     else {
-        smooth = 6.f + (2.f + (smooth_multiplier - 1.f)) * fov;
+        smooth = 6.f + (smooth_multiplier + 1.f) * fov;
     }
     if (smooth > 0.1f) {
         Delta->x /= smooth;
@@ -411,31 +410,6 @@ void SmoothType_Asist(float fov, float TargetDistance, Vector* Delta, int smooth
     Unprotect(_ReturnAddress());
 }
 
-void SmoothType_TargetLock(float fov, float TargetDistance, Vector* Delta, int smooth_multiplier) {
-    Protect(_ReturnAddress());
-    if (!TargetLocked) {
-        Unprotect(milliseconds_now);
-        uintptr_t timePassed = milliseconds_now() - StartTimeToAim;
-        Protect(milliseconds_now);
-        int maxTime = (int)smooth_multiplier * 200;
-        if (maxTime > 1000) {
-            maxTime = 1000;
-        }
-        int timeLeft = (int)(maxTime - timePassed);
-        if (timeLeft > 13) {
-            float smooth = timeLeft / 15.f;
-            if (smooth > 1.f) {
-                Delta->x /= smooth;
-                Delta->y /= smooth;
-                Delta->z /= smooth;
-            }
-        }
-        else { //time passed
-            TargetLocked = true;
-        }
-    }
-    Unprotect(_ReturnAddress());
-}
 
 int AimAngles(Entity* LocalPlayer, Entity* target, Vector * out) {
     Protect(_ReturnAddress());
