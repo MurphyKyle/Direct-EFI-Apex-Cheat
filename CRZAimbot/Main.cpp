@@ -19,11 +19,10 @@ bool targetDummiesToggled = 0;
 int SMOOTH = 12;
 int Spectators = 0;
 
-int enable_aimbot_lock_mode = 0;
-bool enable_aimbot = true;
 bool enable_glow_hack = true;
 bool enableTargetDummies = false;
 bool enableTargetTeammate = false;
+
 uintptr_t entityNum = 70;
 
 float* vis_old = new float[(entityNum + (uintptr_t)1)];
@@ -271,26 +270,24 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index
         }
     }
 
-    if (enable_aimbot) {
-        if (!(enableTargetDummies) && (target->isBleedOut() || !target->isOkLifeState())) {
-            Unprotect(_ReturnAddress());
-            return;
-        }
+    if (!(enableTargetDummies) && (target->isBleedOut() || !target->isOkLifeState())) {
+        Unprotect(_ReturnAddress());
+        return;
+    }
 
-        if ((entity_team == LPlayer->getTeamId()) && !enableTargetTeammate) {
-            Unprotect(_ReturnAddress());
-            return;
-        }
+    if ((entity_team == LPlayer->getTeamId()) && !enableTargetTeammate) {
+        Unprotect(_ReturnAddress());
+        return;
+    }
 
-        if (target->vis_time() > vis_old[index] || target->vis_time() < 0.f && vis_old[index] > 0.f) {
-            Vector BreathAngles = LPlayer->GetBreathAngles();
-            Vector LocalCamera = LPlayer->GetCamPos();
-            Vector Angle = Math::CalcAngle(LocalCamera, BonePosition);
-            float fov = (float)Math::GetFov(BreathAngles, Angle, dist);
-            if (fov < current_fov_limiter) {
-                AimTarget = target->ptr;
-                current_fov_limiter = fov;
-            }
+    if (target->vis_time() > vis_old[index] || target->vis_time() < 0.f && vis_old[index] > 0.f) {
+        Vector BreathAngles = LPlayer->GetBreathAngles();
+        Vector LocalCamera = LPlayer->GetCamPos();
+        Vector Angle = Math::CalcAngle(LocalCamera, BonePosition);
+        float fov = (float)Math::GetFov(BreathAngles, Angle, dist);
+        if (fov < current_fov_limiter) {
+            AimTarget = target->ptr;
+            current_fov_limiter = fov;
         }
     }
     Unprotect(_ReturnAddress());
@@ -459,7 +456,7 @@ int AimAngles(Entity* LocalPlayer, Entity* target, Vector * out) {
 
     Vector RecoilVec = LocalPlayer->GetRecoil();
     if (RecoilVec.x != 0 || RecoilVec.y != 0) {
-        Delta -= (RecoilVec * 0.05f); //only a little as we are already fixing the recoil with breath angles
+        Delta -= (RecoilVec * (SMOOTH * 0.02)); //Scale up/down based on smooth
         Math::NormalizeAngles(Delta);
     }
 
@@ -579,7 +576,7 @@ void RunApp() {
                     {
                         Protect(milliseconds_now);
                         // print msgs
-                        char sp_str[] = { '\n', 'S','p','e','c','t','a','t','o','r','s',':',' ','%','l','l','u','\n','\n','\0' };
+                        char sp_str[] = { '\n', 'S','p','e','c','t','a','t','o','r','s',':',' ','%','u','\n','\n','\0' };
                         printf(sp_str, Spectators);
                         memset(sp_str, 0, sizeof(sp_str));
 
@@ -591,55 +588,51 @@ void RunApp() {
                     nextConsoleUpdate = milliseconds_now() + 2000;
                     Protect(milliseconds_now);
 
-                    if (enable_aimbot) {
-                        Unprotect(milliseconds_now);
-                        bool key_pressed = (GetKeyState(activeKey) & 0x8000);
-                        if (AimTarget > 0 && key_pressed && nextAim < milliseconds_now()) {
-                            Protect(milliseconds_now);
 
-                            if (lastAimTarget != AimTarget) {
-                                TargetLocked = false;
-                                Unprotect(milliseconds_now);
-                                StartTimeToAim = milliseconds_now();
-                                Protect(milliseconds_now);
-                                lastAimTarget = AimTarget;
-                            }
-                            Unprotect(getEntity);
-                            Entity* target = getEntity(GamePid, AimTarget);
-                            Protect(getEntity);
+                    Unprotect(milliseconds_now);
+                    bool key_pressed = (GetKeyState(activeKey) & 0x8000);
+                    if (AimTarget > 0 && key_pressed && nextAim < milliseconds_now()) {
+                        Protect(milliseconds_now);
 
-                            Vector result = { 0.f,0.f,0.f };
-
-                            Unprotect(AimAngles);
-                            int status = AimAngles(LocalPlayer, target, &result);
-                            Protect(AimAngles);
-                            if (status == 1) { // 1 = movement needed, 2 = view already there, 0 = some out of aimbot params
-                                LocalPlayer->SetViewAngles(GamePid, result);
-                            }
-                            else if (status == 0) {
-                                TargetLocked = false;
-                                Unprotect(milliseconds_now);
-                                StartTimeToAim = milliseconds_now();
-                                Protect(milliseconds_now);
-                            }
-
-                            delete target;
-                            Unprotect(milliseconds_now);
-                            nextAim = milliseconds_now() + 16; //16 = ~60 movements per second
-                            Protect(milliseconds_now);
-                        }
-                        else if (!key_pressed || AimTarget == 0) {
-
+                        if (lastAimTarget != AimTarget) {
                             TargetLocked = false;
                             Unprotect(milliseconds_now);
                             StartTimeToAim = milliseconds_now();
                             Protect(milliseconds_now);
-
-                            ProtectedSleep(2);
+                            lastAimTarget = AimTarget;
                         }
+                        Unprotect(getEntity);
+                        Entity* target = getEntity(GamePid, AimTarget);
+                        Protect(getEntity);
+
+                        Vector result = { 0.f,0.f,0.f };
+
+                        Unprotect(AimAngles);
+                        int status = AimAngles(LocalPlayer, target, &result);
+                        Protect(AimAngles);
+                        if (status == 1) { // 1 = movement needed, 2 = view already there, 0 = some out of aimbot params
+                            LocalPlayer->SetViewAngles(GamePid, result);
+                        }
+                        else if (status == 0) {
+                            TargetLocked = false;
+                            Unprotect(milliseconds_now);
+                            StartTimeToAim = milliseconds_now();
+                            Protect(milliseconds_now);
+                        }
+
+                        delete target;
+                        Unprotect(milliseconds_now);
+                        nextAim = milliseconds_now() + 16; //16 = ~60 movements per second
+                        Protect(milliseconds_now);
                     }
-                    else {
-                        ProtectedSleep(100);
+                    else if (!key_pressed || AimTarget == 0) {
+
+                        TargetLocked = false;
+                        Unprotect(milliseconds_now);
+                        StartTimeToAim = milliseconds_now();
+                        Protect(milliseconds_now);
+
+                        //ProtectedSleep(2);
                     }
                     Protect(milliseconds_now);
         
@@ -657,7 +650,7 @@ void RunApp() {
                 if ((GetAsyncKeyState(VK_ADD) & 0x1) != 0)
                 {
                     SMOOTH += 1;
-                    if (SMOOTH > 15) SMOOTH = 15;
+                    if (SMOOTH > 20) SMOOTH = 20;
 
                     char smthMsg[] = { 'S','m','o','o','t','h',' ','(','+','/','-',')',' ',':',' ','%','u','\n','\0' };
                     printf(smthMsg, SMOOTH);
