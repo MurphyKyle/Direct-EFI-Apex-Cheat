@@ -709,8 +709,8 @@ void RunApp() {
         }
         else
         {
-            const char msg[] = { 'W','a','i','t','i','n','g',' ','t','o',' ','C','o','n','n','e','c','t','.',' ','.',' ','.','\0' };
-            std::cout << msg << std::endl;
+            const char msg[] = { 'W','a','i','t','i','n','g',' ','t','o',' ','C','o','n','n','e','c','t','.',' ','.',' ','.','\t','\0' };
+            std::cout << msg;
             ProtectedSleep(2000);
         }
     }
