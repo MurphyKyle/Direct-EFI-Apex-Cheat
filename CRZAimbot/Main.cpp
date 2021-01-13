@@ -407,7 +407,6 @@ void SmoothType_Asist(float fov, float TargetDistance, Vector* Delta, int smooth
     Unprotect(_ReturnAddress());
 }
 
-
 int AimAngles(Entity* LocalPlayer, Entity* target, Vector * out) {
     Protect(_ReturnAddress());
     Vector LocalCamera = LocalPlayer->GetCamPos();
@@ -441,8 +440,8 @@ int AimAngles(Entity* LocalPlayer, Entity* target, Vector * out) {
     Vector LocalPlayerPosition = LocalPlayer->getPosition();
     float TargetDistance = LocalPlayerPosition.DistTo(EntityPosition) / 39.62f;
 
-    double fov = Math::GetFov(DynBreath, CalculatedAngles, TargetDistance); //fov based in distance to the target and angles (like create an sphere around the target, fov is the radius
-    if (fov > 2.f || TargetDistance > Max_Distance) {
+    double aimDistFromTarget = Math::GetFov(DynBreath, CalculatedAngles, TargetDistance); //fov based in distance to the target and angles (like create an sphere around the target, fov is the radius
+    if (aimDistFromTarget > 1.5f || TargetDistance > Max_Distance) {
         Unprotect(_ReturnAddress());
         return 0;
     }
@@ -456,13 +455,13 @@ int AimAngles(Entity* LocalPlayer, Entity* target, Vector * out) {
 
     Vector RecoilVec = LocalPlayer->GetRecoil();
     if (RecoilVec.x != 0 || RecoilVec.y != 0) {
-        Delta -= (RecoilVec * (SMOOTH * 0.02)); //Scale up/down based on smooth
+        Delta -= (RecoilVec * (SMOOTH * 0.025)); //Scale up/down based on smooth
         Math::NormalizeAngles(Delta);
     }
 
-    float fov2 = (float)Math::GetFov2(DynBreath, CalculatedAngles);
+    float aimDistFromTargetBone = (float)Math::GetFov2(DynBreath, CalculatedAngles);
     Unprotect(SmoothType_Asist);
-    SmoothType_Asist(fov2, TargetDistance , &Delta, SMOOTH);
+    SmoothType_Asist(aimDistFromTargetBone, TargetDistance , &Delta, SMOOTH);
     Protect(SmoothType_Asist);
 
     Math::NormalizeAngles(Delta);
@@ -484,7 +483,8 @@ void RunApp() {
     Protect(_ReturnAddress());
     entitylist = GameBaseAddress + TOFFSET(OFFSET_ENTITYLIST);
     uintptr_t lastAimTarget = 0;
-    int activeKey = 0x36; // 6
+    int activeKey = VK_RBUTTON;
+    int altActiveKey = 0x36; // 6 key;
     
     while (true) {
         uintptr_t lptr = Driver::read<uintptr_t>(GamePid, GameBaseAddress + TOFFSET(OFFSET_LOCAL_ENT));
@@ -583,14 +583,17 @@ void RunApp() {
                         char smthMsg[] = { 'S','m','o','o','t','h',' ','(','+','/','-',')',' ',':',' ','%','u','\n','\0' };
                         printf(smthMsg, SMOOTH);
                         memset(smthMsg, 0, sizeof(smthMsg));
+                        
+                        Unprotect(milliseconds_now);
+                        nextConsoleUpdate = milliseconds_now() + 2000;
+                        Protect(milliseconds_now);
                     }
-                    Unprotect(milliseconds_now);
-                    nextConsoleUpdate = milliseconds_now() + 2000;
-                    Protect(milliseconds_now);
-
 
                     Unprotect(milliseconds_now);
-                    bool key_pressed = (GetKeyState(activeKey) & 0x8000);
+                    bool primaryKeyPressed = (GetKeyState(activeKey) & 0x8000);
+                    bool key_pressed = primaryKeyPressed ? true : (GetKeyState(altActiveKey) & 0x8000);
+                    //bool key_pressed = (GetKeyState(altActiveKey) & 0x8000);
+
                     if (AimTarget > 0 && key_pressed && nextAim < milliseconds_now()) {
                         Protect(milliseconds_now);
 
