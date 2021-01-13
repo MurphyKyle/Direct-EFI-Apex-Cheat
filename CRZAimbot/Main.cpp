@@ -17,11 +17,13 @@ bool printableOut = false;
 bool targetDummiesToggled = 0;
 
 int SMOOTH = 12;
+int oldSmooth = SMOOTH;
 int Spectators = 0;
 
 bool enable_glow_hack = true;
 bool enableTargetDummies = false;
 bool enableTargetTeammate = false;
+bool usingAltSmooth = false;
 
 uintptr_t entityNum = 70;
 
@@ -167,8 +169,6 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index
     Protect((void*)*(uintptr_t*)&fptr);
     if (obser == LPlayer->ptr) {
         Spectators++;
-    }
-    if (obser != 0) { // Is an observer... nothing to do
         Unprotect(_ReturnAddress());
         return;
     }
@@ -575,6 +575,27 @@ void RunApp() {
                     if (nextConsoleUpdate < milliseconds_now())
                     {
                         Protect(milliseconds_now);
+
+                        if (Spectators > 0)
+                        {
+                            if (SMOOTH < 8)
+                            {
+                                oldSmooth = SMOOTH;
+                                SMOOTH = 8;
+                                usingAltSmooth = true;
+                            }
+                        }
+                        else
+                        {
+                            if (usingAltSmooth)
+                            {
+                                SMOOTH = oldSmooth;
+                                oldSmooth = SMOOTH;
+                                usingAltSmooth = false;
+
+                            }
+                        }
+
                         // print msgs
                         char sp_str[] = { '\n', 'S','p','e','c','t','a','t','o','r','s',':',' ','%','u','\n','\n','\0' };
                         printf(sp_str, Spectators);
@@ -585,7 +606,7 @@ void RunApp() {
                         memset(smthMsg, 0, sizeof(smthMsg));
                         
                         Unprotect(milliseconds_now);
-                        nextConsoleUpdate = milliseconds_now() + 2000;
+                        nextConsoleUpdate = milliseconds_now() + 1000;
                         Protect(milliseconds_now);
                     }
 
@@ -654,6 +675,7 @@ void RunApp() {
                 {
                     SMOOTH += 1;
                     if (SMOOTH > 20) SMOOTH = 20;
+                    oldSmooth = SMOOTH;
 
                     char smthMsg[] = { 'S','m','o','o','t','h',' ','(','+','/','-',')',' ',':',' ','%','u','\n','\0' };
                     printf(smthMsg, SMOOTH);
@@ -664,6 +686,7 @@ void RunApp() {
                 {
                     SMOOTH -= 1;
                     if (SMOOTH < 1) SMOOTH = 1;
+                    oldSmooth = SMOOTH;
 
                     char smthMsg[] = { 'S','m','o','o','t','h',' ','(','+','/','-',')',' ',':',' ','%','u','\n','\0' };
                     printf(smthMsg, SMOOTH);
