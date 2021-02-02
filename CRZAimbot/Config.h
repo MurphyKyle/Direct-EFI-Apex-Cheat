@@ -1,7 +1,7 @@
 #pragma once
 
 //MISC
-#define Max_Distance 150.f
+#define Max_Distance 200.f
 
 
 //XOR Keys

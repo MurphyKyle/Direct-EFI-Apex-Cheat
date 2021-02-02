@@ -20,7 +20,7 @@ int SMOOTH = 12;
 int oldSmooth = SMOOTH;
 int Spectators = 0;
 
-bool enable_glow_hack = true;
+bool enable_glow_hack = false;
 bool enableTargetDummies = false;
 bool enableTargetTeammate = false;
 bool usingAltSmooth = false;
@@ -169,6 +169,8 @@ void ProcessPlayer(Entity* LPlayer, Entity* target, UINT64 entitylist, int index
     Protect((void*)*(uintptr_t*)&fptr);
     if (obser == LPlayer->ptr) {
         Spectators++;
+    }
+    if (obser != 0) { // Is an observer... nothing to do
         Unprotect(_ReturnAddress());
         return;
     }
@@ -441,7 +443,7 @@ int AimAngles(Entity* LocalPlayer, Entity* target, Vector * out) {
     float TargetDistance = LocalPlayerPosition.DistTo(EntityPosition) / 39.62f;
 
     double aimDistFromTarget = Math::GetFov(DynBreath, CalculatedAngles, TargetDistance); //fov based in distance to the target and angles (like create an sphere around the target, fov is the radius
-    if (aimDistFromTarget > 1.5f || TargetDistance > Max_Distance) {
+    if (aimDistFromTarget > 2.0f || TargetDistance > Max_Distance) {
         Unprotect(_ReturnAddress());
         return 0;
     }
@@ -455,7 +457,7 @@ int AimAngles(Entity* LocalPlayer, Entity* target, Vector * out) {
 
     Vector RecoilVec = LocalPlayer->GetRecoil();
     if (RecoilVec.x != 0 || RecoilVec.y != 0) {
-        Delta -= (RecoilVec * (SMOOTH * 0.025)); //Scale up/down based on smooth
+        Delta -= (RecoilVec * (SMOOTH * 0.015)); //Scale up/down based on smooth
         Math::NormalizeAngles(Delta);
     }
 
@@ -584,6 +586,9 @@ void RunApp() {
                                 SMOOTH = 8;
                                 usingAltSmooth = true;
                             }
+                            char sp_str[] = { '\n','\n','\n','S','p','e','c','t','a','t','o','r','s',':',' ','%','u','\n','\n','\0' };
+                            printf(sp_str, Spectators);
+                            memset(sp_str, 0, sizeof(sp_str));
                         }
                         else
                         {
@@ -592,18 +597,20 @@ void RunApp() {
                                 SMOOTH = oldSmooth;
                                 oldSmooth = SMOOTH;
                                 usingAltSmooth = false;
-
                             }
+                            char sp_str[] = { '\n','S','p','e','c','t','a','t','o','r','s',':',' ','%','u','\n','\0' };
+                            printf(sp_str, Spectators);
+                            memset(sp_str, 0, sizeof(sp_str));
                         }
 
                         // print msgs
-                        char sp_str[] = { '\n', 'S','p','e','c','t','a','t','o','r','s',':',' ','%','u','\n','\n','\0' };
-                        printf(sp_str, Spectators);
-                        memset(sp_str, 0, sizeof(sp_str));
-
                         char smthMsg[] = { 'S','m','o','o','t','h',' ','(','+','/','-',')',' ',':',' ','%','u','\n','\0' };
                         printf(smthMsg, SMOOTH);
                         memset(smthMsg, 0, sizeof(smthMsg));
+
+                        //char lvlMsg[] = { 'L','e','v','e','l',' ',':',' ','%','s','\n','\0' };
+                        //printf(lvlMsg, lvlStr);
+                        //memset(lvlMsg, 0, sizeof(lvlStr));
                         
                         Unprotect(milliseconds_now);
                         nextConsoleUpdate = milliseconds_now() + 1000;
@@ -613,7 +620,6 @@ void RunApp() {
                     Unprotect(milliseconds_now);
                     bool primaryKeyPressed = (GetKeyState(activeKey) & 0x8000);
                     bool key_pressed = primaryKeyPressed ? true : (GetKeyState(altActiveKey) & 0x8000);
-                    //bool key_pressed = (GetKeyState(altActiveKey) & 0x8000);
 
                     if (AimTarget > 0 && key_pressed && nextAim < milliseconds_now()) {
                         Protect(milliseconds_now);
@@ -646,7 +652,7 @@ void RunApp() {
 
                         delete target;
                         Unprotect(milliseconds_now);
-                        nextAim = milliseconds_now() + 16; //16 = ~60 movements per second
+                        nextAim = milliseconds_now() + 13; //16 = ~60 movements per second
                         Protect(milliseconds_now);
                     }
                     else if (!key_pressed || AimTarget == 0) {
